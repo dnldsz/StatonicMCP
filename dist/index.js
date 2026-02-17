@@ -604,6 +604,62 @@ The zoom animation interpolates linearly between keyframes. Keyframes are relati
             required: ['hook_duration_sec', 'total_duration_sec']
         }
     },
+    {
+        name: 'create_variations',
+        description: `Generate project variation files from the currently open project's variation session.
+
+The user must have clicked "Variations" in the editor toolbar first, which writes variation-context.json to ~/Library/Application Support/Statonic/.
+
+Each variation is a full copy of the project with:
+  - textChanges: find/replace rules applied to ALL text segment "text" fields (case-insensitive)
+  - clipOverrides: swap specific video segments by segmentId with a new clip path
+
+Writes each variation as [name].json to the variationsFolder. The editor watches that folder and picks up each file automatically, rendering thumbnails and showing them in the grid.
+
+Example instruction "make variations for biology, maths and physics" should produce 3 variations, each replacing the subject word in all text and optionally swapping clips.`,
+        inputSchema: {
+            type: 'object',
+            properties: {
+                variations: {
+                    type: 'array',
+                    description: 'Array of variations to generate',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            name: { type: 'string', description: 'Variation name used as filename, e.g. "Biology"' },
+                            textChanges: {
+                                type: 'array',
+                                description: 'Find/replace rules applied to all text segments (case-insensitive)',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        find: { type: 'string' },
+                                        replace: { type: 'string' },
+                                    },
+                                    required: ['find', 'replace'],
+                                },
+                            },
+                            clipOverrides: {
+                                type: 'array',
+                                description: 'Swap specific video segments by their ID',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        segmentId: { type: 'string', description: 'ID of the video segment to replace' },
+                                        clipPath: { type: 'string', description: 'Absolute path to the new video file' },
+                                        clipName: { type: 'string', description: 'Display name for the new clip' },
+                                    },
+                                    required: ['segmentId', 'clipPath'],
+                                },
+                            },
+                        },
+                        required: ['name'],
+                    },
+                },
+            },
+            required: ['variations'],
+        },
+    },
 ];
 // ── Server ─────────────────────────────────────────────────────────────────
 const server = new Server({ name: 'iterate-mcp', version: '0.1.0' }, { capabilities: { tools: {} } });
@@ -1944,6 +2000,64 @@ Rules:
                                 `Appended to hook-knowledge.json (${knowledge.learned_examples.length} learned examples total).`,
                         }],
                 };
+            }
+            case 'create_variations': {
+                const { variations } = args;
+                const homeDir = process.env.HOME || process.env.USERPROFILE || '~';
+                const contextPath = join(homeDir, 'Library', 'Application Support', 'Statonic', 'variation-context.json');
+                if (!existsSync(contextPath)) {
+                    return { content: [{ type: 'text', text: 'No variation session active. Open a project in the editor and click "Variations" in the toolbar first.' }] };
+                }
+                const context = JSON.parse(readFileSync(contextPath, 'utf-8'));
+                const { variationsFolder, project: baseProject } = context;
+                mkdirSync(variationsFolder, { recursive: true });
+                const written = [];
+                const errors = [];
+                for (const variation of variations) {
+                    try {
+                        const varProject = JSON.parse(JSON.stringify(baseProject));
+                        varProject.name = variation.name;
+                        // Apply text find/replace to all text segments
+                        if (variation.textChanges?.length) {
+                            for (const track of varProject.tracks ?? []) {
+                                for (const seg of track.segments ?? []) {
+                                    if (seg.type !== 'text' || !seg.text)
+                                        continue;
+                                    for (const change of variation.textChanges) {
+                                        const regex = new RegExp(change.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+                                        seg.text = seg.text.replace(regex, change.replace);
+                                    }
+                                }
+                            }
+                        }
+                        // Apply clip overrides by segmentId
+                        if (variation.clipOverrides?.length) {
+                            for (const override of variation.clipOverrides) {
+                                for (const track of varProject.tracks ?? []) {
+                                    const seg = (track.segments ?? []).find((s) => s.id === override.segmentId);
+                                    if (seg && seg.type === 'video') {
+                                        seg.src = override.clipPath;
+                                        if (override.clipName)
+                                            seg.name = override.clipName;
+                                    }
+                                }
+                            }
+                        }
+                        const outPath = join(variationsFolder, `${variation.name}.json`);
+                        writeFileSync(outPath, JSON.stringify(varProject, null, 2));
+                        written.push(variation.name);
+                    }
+                    catch (e) {
+                        errors.push(`${variation.name}: ${e.message}`);
+                    }
+                }
+                const summary = [
+                    `Created ${written.length} variation${written.length !== 1 ? 's' : ''} in:`,
+                    `  ${variationsFolder}`,
+                    written.length > 0 ? `Written: ${written.join(', ')}` : '',
+                    errors.length > 0 ? `Errors:\n${errors.map(e => '  ' + e).join('\n')}` : '',
+                ].filter(Boolean).join('\n');
+                return { content: [{ type: 'text', text: summary }] };
             }
             default:
                 throw new Error(`Unknown tool: ${name}`);
