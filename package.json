@@ -1,7 +1,7 @@
 {
-  "name": "iterate-mcp",
+  "name": "statonic-mcp",
   "version": "0.1.0",
-  "description": "MCP server for Statonic / iterate-editor",
+  "description": "StatonicMCP — MCP server for Statonic video editor",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
