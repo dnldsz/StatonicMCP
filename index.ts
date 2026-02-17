@@ -693,15 +693,18 @@ The zoom animation interpolates linearly between keyframes. Keyframes are relati
     name: 'create_variations',
     description: `Generate project variation files from the currently open project's variation session.
 
-The user must have clicked "Variations" in the editor toolbar first, which writes variation-context.json to ~/Library/Application Support/Statonic/.
+IMPORTANT: Do NOT call get_reference_frames or any other tool before this one. Go straight to create_variations — all the information you need (project structure, segment IDs, available clips) is already in variation-context.json.
+
+The user must have clicked "Variations" in the editor toolbar first, which writes variation-context.json to ~/Library/Application Support/Statonic/. Read that file to get:
+  - project: the full project JSON with all segment IDs
+  - clips: the available clip library with id, name, path, category, duration
+  - variationsFolder: where to write the output files
 
 Each variation is a full copy of the project with:
   - textChanges: find/replace rules applied to ALL text segment "text" fields (case-insensitive)
-  - clipOverrides: swap specific video segments by segmentId with a new clip path
+  - clipOverrides: swap specific video segments by segmentId — use the segment IDs from project.tracks[].segments[].id and clip paths from the clips array
 
-Writes each variation as [name].json to the variationsFolder. The editor watches that folder and picks up each file automatically, rendering thumbnails and showing them in the grid.
-
-Example instruction "make variations for biology, maths and physics" should produce 3 variations, each replacing the subject word in all text and optionally swapping clips.`,
+Writes each variation as [name].json to the variationsFolder. The editor picks them up automatically.`,
     inputSchema: {
       type: 'object',
       properties: {
