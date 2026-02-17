@@ -619,7 +619,9 @@ Each variation is a full copy of the project with:
   - textChanges: find/replace rules applied to ALL text segment "text" fields (case-insensitive)
   - clipOverrides: swap specific video segments by segmentId — use the segment IDs from project.tracks[].segments[].id and clip paths from the clips array
 
-Writes each variation as [name].json to the variationsFolder. The editor picks them up automatically.`,
+Writes each variation as [name].json to the variationsFolder. The editor picks them up automatically.
+
+IMPORTANT: After calling create_variations, do NOT call write_statonic_project, render_preview, get_suitable_audio, or any other tool. Just return the summary and stop — the editor handles everything from here.`,
         inputSchema: {
             type: 'object',
             properties: {
